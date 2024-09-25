@@ -8,6 +8,23 @@ import matplotlib
 import io
 import urllib, base64
 
+from dotenv import load_dotenv, find_dotenv
+import json
+import os
+from openai import OpenAI
+#from openai.embeddings_utils import get_embedding, cosine_similarity
+import numpy as np
+
+
+#Esta función devuelve una representación numérica (embedding) de un texto, en este caso
+        #la descripción de las películas
+            
+def get_embedding(text, client, model="text-embedding-3-small"):
+    text = text.replace("\n", " ")
+    return client.embeddings.create(input = [text], model=model).data[0].embedding
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 
 def home(request):
@@ -20,6 +37,42 @@ def home(request):
     else:
         movies = Movie.objects.all()
     return render(request, 'home.html', {'searchTerm':searchTerm, 'movies':movies})
+
+def recommendations(request):
+    searchTerm = request.GET.get('searchMovie') # GET se usa para solicitar recursos de un servidor
+    if searchTerm:
+        # movies = Movie.objects.filter(title__icontains=searchTerm)
+
+        #Se lee del archivo .env la api key de openai
+        _ = load_dotenv('../api_keys.env')
+        client = OpenAI(
+        # This is the default and can be omitted
+            api_key=os.environ.get('openai_api_key'),
+        )
+        
+        items = Movie.objects.all()
+
+        req = searchTerm
+        emb_req = get_embedding(req, client)
+
+        sim = []
+        for i in range(len(items)):
+            emb = items[i].emb
+            emb = list(np.frombuffer(emb))
+            sim.append(cosine_similarity(emb,emb_req))
+        sim = np.array(sim)
+        print(sim)
+        idx = np.argmax(sim)
+        idx = int(idx)
+        print(items[idx].title)
+
+        movie = items[idx]
+        movies = [movie]
+        
+    else:
+        movies = Movie.objects.all()
+    return render(request, 'recommend.html', {'searchTerm':searchTerm, 'movies':movies})
+
 
 
 def about(request):
